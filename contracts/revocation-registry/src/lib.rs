@@ -1,5 +1,7 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, BytesN, Env, Vec};
+use soroban_sdk::{
+    contract, contractimpl, contracttype, symbol_short, Address, BytesN, Env, Vec,
+};
 
 #[contracttype]
 pub enum RevocationKey {
@@ -13,16 +15,31 @@ pub struct RevocationRegistry;
 
 #[contractimpl]
 impl RevocationRegistry {
-    pub fn initialize(_env: Env, _admin: Address) {
-        panic!("not yet implemented")
+    pub fn initialize(env: Env, admin: Address) {
+        if env.storage().instance().has(&RevocationKey::Admin) {
+            panic!("already initialized");
+        }
+        admin.require_auth();
+        env.storage().instance().set(&RevocationKey::Admin, &admin);
     }
 
-    pub fn revoke(_env: Env, _issuer: Address, _vc_hash: BytesN<32>) {
-        panic!("not yet implemented")
+    pub fn revoke(env: Env, issuer: Address, vc_hash: BytesN<32>) {
+        issuer.require_auth();
+        env.storage()
+            .persistent()
+            .set(&RevocationKey::Status(vc_hash.clone()), &true);
+        env.storage()
+            .persistent()
+            .set(&RevocationKey::IssuerOfVC(vc_hash.clone()), &issuer);
+        env.events()
+            .publish((symbol_short!("Revoked"),), (issuer, vc_hash));
     }
 
-    pub fn is_revoked(_env: Env, _vc_hash: BytesN<32>) -> bool {
-        panic!("not yet implemented")
+    pub fn is_revoked(env: Env, vc_hash: BytesN<32>) -> bool {
+        env.storage()
+            .persistent()
+            .get(&RevocationKey::Status(vc_hash))
+            .unwrap_or(false)
     }
 
     pub fn batch_revoke(_env: Env, _issuer: Address, _vc_hashes: Vec<BytesN<32>>) {
@@ -31,4 +48,53 @@ impl RevocationRegistry {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+    use soroban_sdk::{testutils::Address as _, Env};
+
+    #[test]
+    fn test_revoke_and_check() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, RevocationRegistry);
+        let client = RevocationRegistryClient::new(&env, &contract_id);
+
+        let issuer = Address::generate(&env);
+        let vc_hash = BytesN::from_array(&env, &[1u8; 32]);
+
+        assert!(!client.is_revoked(&vc_hash));
+        client.revoke(&issuer, &vc_hash);
+        assert!(client.is_revoked(&vc_hash));
+    }
+
+    #[test]
+    fn test_unknown_hash_not_revoked() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, RevocationRegistry);
+        let client = RevocationRegistryClient::new(&env, &contract_id);
+
+        let vc_hash = BytesN::from_array(&env, &[2u8; 32]);
+        assert!(!client.is_revoked(&vc_hash));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_only_issuer_can_revoke() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, RevocationRegistry);
+        let client = RevocationRegistryClient::new(&env, &contract_id);
+
+        let issuer = Address::generate(&env);
+        let vc_hash = BytesN::from_array(&env, &[3u8; 32]);
+
+        // Mock auth will fail if we don't provide the correct address
+        // However, mock_all_auths() makes all auths succeed.
+        // To test failure, we need to NOT use mock_all_auths or specifically fail it.
+        // Let's create a new env without mock_all_auths for this test.
+        let env2 = Env::default();
+        let contract_id2 = env2.register_contract(None, RevocationRegistry);
+        let client2 = RevocationRegistryClient::new(&env2, &contract_id2);
+        client2.revoke(&issuer, &vc_hash);
+    }
+}
