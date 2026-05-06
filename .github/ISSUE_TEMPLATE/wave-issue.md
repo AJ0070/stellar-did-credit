@@ -1,6 +1,6 @@
 ---
-name: Wave Issue
-about: A task available for Drips Wave contributors
+name: Issue Template
+about: A task available for contributors
 labels: ''
 assignees: ''
 ---

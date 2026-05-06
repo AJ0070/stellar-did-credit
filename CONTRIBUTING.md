@@ -22,10 +22,6 @@ pnpm install
 cargo test --workspace
 ```
 
-## Drips Wave
-
-This project uses [Drips Wave](https://drips.network/wave) for contributor rewards. Contributors earn USDC by resolving labeled issues during weekly sprints. Look for issues tagged `wave` to find available tasks.
-
 ## PR guidelines
 
 - One issue per PR
