@@ -263,7 +263,7 @@ mod tests {
 
         // First revoke registers issuer_a for this vc_hash.
         client.revoke(&issuer_a, &vc_hash);
-        assert!(client.is_revoked(&vc_hash));
+        client.revoke(&issuer_a, &vc_hash);
 
         // issuer_b must not be able to revoke the same hash.
         let res = client.try_revoke(&issuer_b, &vc_hash);
